@@ -1,0 +1,203 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X1",
+    "nombre": "CT. Francisco Uribe",
+    "direccion": "AV 3N # 20N - 54",
+    "barrio": "Versalles",
+    "precision": "exacta",
+    "nota": "Estación Central · Tel. (+57) (602) 882 1252 · Lun a vie 7:30 a.m. – 5:30 p.m."
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.5273606,
+     3.4603635
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X2",
+    "nombre": "CT. Jaime Castro Córdoba",
+    "direccion": "Cra. 24 # 7 - 22",
+    "barrio": "Alameda",
+    "precision": "exacta",
+    "nota": "Edificio patrimonial (PEP Cali)"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.53712,
+     3.436318
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X3",
+    "nombre": "CT. Francisco Andrade Mercado",
+    "direccion": "Cll. 33A # 11F - 07",
+    "barrio": "Municipal",
+    "precision": "exacta",
+    "nota": ""
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.5116412,
+     3.4474667
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X4",
+    "nombre": "CT. Alfredo Hurtado Sánchez",
+    "direccion": "Cll. 36 # 44 - 20",
+    "barrio": "Villa del Sur",
+    "precision": "exacta",
+    "nota": ""
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.5177268,
+     3.4104634
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X5",
+    "nombre": "CT. Gustavo Velasco Sarmiento",
+    "direccion": "Cra. 52 Oeste # 1 - 20",
+    "barrio": "Siloé",
+    "precision": "exacta",
+    "nota": ""
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.5550572,
+     3.4167061
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X6",
+    "nombre": "CT. José Aparicio Rodewalt",
+    "direccion": "Av. 15 Oeste # 10 - 40",
+    "barrio": "Aguacatal",
+    "precision": "exacta",
+    "nota": ""
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.554874,
+     3.4594403
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X7",
+    "nombre": "CT. Antonio José Arana",
+    "direccion": "Cll. 73 # D26M - 53",
+    "barrio": "Los Mangos",
+    "precision": "exacta",
+    "nota": ""
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.4840661,
+     3.4268539
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X8",
+    "nombre": "CT. Manuel Jordá Capdevilla",
+    "direccion": "Cll. 62N # 3B BIS - 12",
+    "barrio": "La Flora",
+    "precision": "exacta",
+    "nota": ""
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.5140025,
+     3.4907318
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X9",
+    "nombre": "Estación El Saladito",
+    "direccion": "Km 13.4 vía al mar",
+    "barrio": "El Saladito (rural)",
+    "precision": "aproximada",
+    "nota": "Ubicación aproximada: cabecera de El Saladito (el enlace de la página oficial apunta por error a la X8)"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.608292,
+     3.482664
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X10",
+    "nombre": "CT. Gonzalo A. Magaña Colmenares",
+    "direccion": "Cra. 41D # 54A - 25",
+    "barrio": "El Vallado",
+    "precision": "exacta",
+    "nota": ""
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.5014779,
+     3.4040088
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "estacion": "X11",
+    "nombre": "CT. Luis Fischer Von Becker",
+    "direccion": "Cra. 87 # 4C - 95",
+    "barrio": "Meléndez",
+    "precision": "exacta",
+    "nota": ""
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -76.5444343,
+     3.3799361
+    ]
+   }
+  }
+ ]
+}

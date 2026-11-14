@@ -1,0 +1,54 @@
+# ColAIre · Cali Resiliente
+# Levanta n8n (motor del chat) y la plataforma web.
+#   docker compose up -d
+# Plataforma: http://localhost:8080   ·   n8n: http://localhost:5678
+name: colaire
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - GENERIC_TIMEZONE=America/Bogota
+      - TZ=America/Bogota
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - N8N_SECURE_COOKIE=false
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+      - WEBHOOK_URL=http://localhost:5678/
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+    # La primera vez importa y activa el flujo de ColAIre; luego solo arranca n8n.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ ! -f /home/node/.n8n/.colaire_importado ]; then
+          echo "[ColAIre] Importando el flujo..."
+          n8n import:workflow --input=/workflows/colaire_flujo.json \
+            && (n8n update:workflow --id=C0lAIreCaliFlujo --active=true || n8n publish:workflow --id=C0lAIreCaliFlujo || true) \
+            && touch /home/node/.n8n/.colaire_importado
+        fi
+        if [ ! -f /home/node/.n8n/.colaire_semaforos ]; then
+          echo "[ColAIre] Importando el flujo de semáforos..."
+          n8n import:workflow --input=/workflows/colaire_semaforos.json \
+            && (n8n update:workflow --id=C0lAIreSemaforo1 --active=true || true) \
+            && touch /home/node/.n8n/.colaire_semaforos
+        fi
+        exec n8n start
+
+  web:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+
+volumes:
+  n8n_data:

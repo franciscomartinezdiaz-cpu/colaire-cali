@@ -1,0 +1,160 @@
+{
+  "name": "ColAIre · Semáforos dañados → correo a Jhinna",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "colaire-semaforo",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "07523241-219d-420a-b032-b2ae53ad82e0",
+      "name": "Reporte de semáforo dañado",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "3e27a411-c6a3-4c28-8891-dcbc3e22362f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const CONFIG = {\n  // ===== Edita solo esto =====\n  CORREO_JHINNA: 'PEGA_AQUI_EL_CORREO_DE_JHINNA',   // destinatario principal\n  CORREO_COPIA: '',                                 // opcional: más correos separados por coma\n  // ===========================\n};\nconst b = $input.first().json.body || $input.first().json;\nconst s = b.semaforo || {};\nconst esc = x => String(x ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst fmt = iso => { try { return new Date(iso).toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'long', timeStyle: 'short' }); } catch (e) { return iso; } };\nconst mapa = `https://www.google.com/maps?q=${s.lat},${s.lon}`;\nconst para = [CONFIG.CORREO_JHINNA, ...String(CONFIG.CORREO_COPIA || '').split(',')].map(x => x.trim()).filter(x => x && x.includes('@'));\nconst asunto = `🚦 Semáforo dañado #${s.id} · ${s.direccion} (Comuna ${s.comuna})`;\nconst fila = (k, v) => `<tr><td style=\"padding:6px 10px;color:#475569;font-weight:600;white-space:nowrap\">${k}</td><td style=\"padding:6px 10px\">${v}</td></tr>`;\nconst html = `<div style=\"font-family:Arial,Helvetica,sans-serif;max-width:560px;color:#0f172a\">\n  <div style=\"background:#01334e;color:#fff;padding:14px 18px;border-radius:10px 10px 0 0\"><b style=\"font-size:16px\">ColAIre · Reporte de semáforo dañado</b><div style=\"font-size:12px;opacity:.8\">Cali Resiliente · participación ciudadana</div></div>\n  <table style=\"border-collapse:collapse;width:100%;border:1px solid #e2e8f0;font-size:14px\">\n    ${fila('Semáforo', '#' + esc(s.id))}\n    ${fila('Dirección', esc(s.direccion))}\n    ${fila('Comuna', esc(s.comuna))}\n    ${fila('Tipo de daño', '<b style=\"color:#b91c1c\">' + esc(b.tipo) + '</b>')}\n    ${b.nota ? fila('Comentario', esc(b.nota)) : ''}\n    ${fila('Ubicación', `${esc(s.lat)}, ${esc(s.lon)} · <a href=\"${mapa}\">Ver en Google Maps</a>`)}\n    ${fila('Hora del reporte', esc(b.hora_reporte_local || fmt(b.hora_reporte)) + (b.simulacion ? ' <span style=\"color:#7c3aed\">(simulación 10 ago 2026)</span>' : ''))}\n    ${fila('Enviado', esc(fmt(b.hora_envio || new Date().toISOString())))}\n    ${fila('Reportado por', esc((b.reportado_por || {}).nombre) + ' · ' + esc((b.reportado_por || {}).rol))}\n  </table>\n  <p style=\"font-size:12px;color:#64748b\">Notificación automática enviada también a la Secretaría de Movilidad en la plataforma ColAIre. Prototipo de demostración: no reemplaza la línea 123.</p></div>`;\nreturn [{ json: { para: para.join(','), asunto, html, listo: para.length > 0, semaforo: s.id } }];\n"
+      },
+      "id": "083e79bc-4616-49eb-8826-f050e004fc44",
+      "name": "Preparar correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.para }}",
+        "subject": "={{ $json.asunto }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0a3ca8f2-37ef-4d18-a4bf-64796029d029",
+      "name": "Enviar correo a Jhinna (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Preparar correo').first().json;\nconst g = $input.first().json;\nconst ok = prev.listo && !g.error && (g.id || g.threadId || g.labelIds);\nreturn [{ json: { ok: true, correo: prev.listo ? (ok ? 'enviado' : 'error') : 'sin destinatario', para: prev.para, semaforo: prev.semaforo, detalle: g.error ? (g.error.message || String(g.error)) : null } }];\n"
+      },
+      "id": "4d3651bc-2093-47a9-b33e-f2afc4f78aa3",
+      "name": "Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4e55406b-6a19-435f-b3a4-8976e916bc3d",
+      "name": "Responder a la plataforma",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ColAIre · Semáforos dañados → correo\n1. Abre **Preparar correo** y pega el correo de Jhinna.\n2. Abre **Enviar correo a Jhinna (Gmail)** → *Credential* → **Create new** → inicia sesión con la cuenta de Gmail que enviará los reportes.\n3. Guarda y **activa** el flujo.\n\nWebhook: **/webhook/colaire-semaforo**",
+        "height": 240,
+        "width": 460
+      },
+      "id": "d03c095b-670a-49d8-a201-a1e3f536945c",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Reporte de semáforo dañado": {
+      "main": [
+        [
+          {
+            "node": "Preparar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar correo": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo a Jhinna (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar correo a Jhinna (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado": {
+      "main": [
+        [
+          {
+            "node": "Responder a la plataforma",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

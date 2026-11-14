@@ -1,0 +1,395 @@
+{
+  "name": "ColAIre · Chat ciudadano → interpretación, georreferencia y alertas por Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "colaire-mensaje",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "9fde15d8-af72-4149-8301-dcc48ec857ee",
+      "name": "Mensaje del chat ciudadano",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "5bde70e8-e1d5-427f-b842-46c34e249b7e"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== CONFIGURACIÓN DE COLAIRE (edita solo este bloque) =====\nconst CONFIG = {\n  // Clave de Google AI Studio: https://aistudio.google.com/apikey\n  GEMINI_API_KEY: 'PEGA_AQUI_TU_CLAVE_DE_GEMINI',\n  GEMINI_MODEL: 'gemini-2.5-flash',\n  // Bot de Telegram creado con @BotFather (déjalo vacío para no enviar alertas)\n  TELEGRAM_BOT_TOKEN: '',\n  // chat_id del grupo \"Sala de crisis\" y, si quieres, uno por entidad\n  TELEGRAM_CHATS: {\n    default: '',\n    salud: '', bomberos: '', riesgo: '', alcaldia: '', gobernacion: '',\n    cruzroja: '', defensacivil: '', movilidad: '', policia: ''\n  },\n};\n// ===============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst p = {\n  texto: String(body.texto || '').slice(0, 1200),\n  autor: body.autor || 'anonimo', nombre: body.nombre || body.autor || 'Ciudadano', rol: body.rol || 'ciudadano',\n  ts: body.ts || Date.now(), barrioPerfil: body.barrioPerfil || null,\n  local: body.local || { clas: null, candidatos: [] },\n};\nreturn [{ json: { config: CONFIG, p, t0: Date.now() } }];\n"
+      },
+      "id": "f546a15f-7f67-4888-b748-e832c6770f8b",
+      "name": "Configuración y entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { p, config } = $input.first().json;\nconst prompt = `Eres el motor de interpretación de ColAIre, plataforma de participación ciudadana en Cali (Colombia) tras el sismo del 10 de agosto de 2026.\nAnaliza el mensaje de un ciudadano y responde SOLO con JSON válido con esta forma:\n{\"tipo\":\"emergencia|ayuda|oferta|info|charla\",\"urgencia\":\"rojo|naranja|amarillo|azul|ninguna\",\"categoria\":\"atrapados|heridos|colapso|estructura|incendio|gas|electrico|necesidades|via|info|null\",\"items\":[],\"personal\":false,\"vias\":[{\"tipo\":\"calle|carrera|avenida|diagonal|transversal\",\"numero\":5,\"letra\":\"\",\"norte\":false}],\"lugar\":null,\"resumen\":\"\"}\nReglas:\n- emergencia = riesgo para personas o estructuras (atrapados, heridos, colapso, incendio, gas, cables, grietas). rojo = vida en riesgo; naranja = daño grave.\n- ayuda = se necesitan insumos o personal. oferta = alguien ofrece ayuda. info = vías bloqueadas o información útil. charla = conversación sin incidente (urgencia \"ninguna\").\n- items solo de esta lista: Agua, Alimentos, Cobijas y ropa, Insumos para bebés, Insumos médicos, Albergue, Energía y logística, Mascotas, Aseo personal, Rescate y escombros, Voluntarios, Personal de salud, Apoyo psicológico, Evaluación estructural. personal=true si se piden personas (voluntarios, médicos, psicólogos, ingenieros).\n- En Cali \"la Quinta\" es la Calle 5, \"la Pasoancho\" la Calle 13, \"la Sexta\" la Avenida 6 Norte, \"la Roosevelt\" la Calle 6. Máximo 2 vías.\n- lugar = barrio o sitio conocido mencionado (ej. \"Mariano Ramos\", \"Hospital Universitario del Valle\"), o null.\n- resumen: máximo 12 palabras, en español.\nMensaje: «${p.texto}»`;\nreturn [{ json: { ...$input.first().json, geminiBody: { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } } } }];\n"
+      },
+      "id": "746aca7c-e41f-4470-b6cd-1508b093c651",
+      "name": "Preparar prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.config.GEMINI_MODEL }}:generateContent?key={{ $json.config.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.geminiBody) }}",
+        "options": {
+          "timeout": 12000
+        }
+      },
+      "id": "18da07c7-3cd8-426b-bbb7-b3837cc72109",
+      "name": "Interpretar con Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Preparar prompt').first().json;\nconst { p } = prev;\nconst g = $input.first().json;\nlet ia = null, error = null;\ntry {\n  const txt = g.candidates[0].content.parts.map(x => x.text || '').join('');\n  ia = JSON.parse(txt.replace(/^```json|```$/g, '').trim());\n} catch (e) { error = (g.error && (g.error.message || JSON.stringify(g.error))) || String(e); }\nconst local = p.local.clas || {};\nconst TIPOS = ['emergencia','ayuda','oferta','info','charla'], URG = ['rojo','naranja','amarillo','azul','ninguna'];\nconst clas = {\n  tipo: ia && TIPOS.includes(ia.tipo) ? ia.tipo : (local.tipo || 'charla'),\n  urgencia: ia && URG.includes(ia.urgencia) ? ia.urgencia : (local.urgencia || 'ninguna'),\n  categoria: ia && ia.categoria && ia.categoria !== 'null' ? ia.categoria : (local.categoria || null),\n  items: ia && Array.isArray(ia.items) ? ia.items : (local.items || []),\n  personal: ia ? !!ia.personal : !!local.personal,\n  resumen: ia && ia.resumen ? ia.resumen : '',\n  lugar: ia && ia.lugar ? ia.lugar : null,\n  vias: ia && Array.isArray(ia.vias) ? ia.vias.slice(0, 2) : [],\n  fuenteIA: ia ? 'gemini' : 'reglas locales',\n  errorIA: error,\n};\n// Consulta de cruce de vías para Overpass (OpenStreetMap)\nconst T = { calle: '(Avenida |Av[.]? )?(Calle|Cl[.]?)', diagonal: '(Diagonal|Dg[.]?)', carrera: '(Avenida |Av[.]? )?(Carrera|Cra[.]?|Kr[.]?)', transversal: '(Transversal|Tv[.]?)', avenida: '(Avenida|Av[.]?)' };\nconst reVia = v => `^${T[v.tipo] || T.calle} 0*${parseInt(v.numero)}${v.letra ? ' ?' + v.letra : '( ?[A-H])?( ?Bis)?'}${v.norte ? ' ?(Norte|N)' : '( ?(Norte|N|Oeste|Sur))?'}$`;\nconst bb = '(3.30,-76.60,3.52,-76.45)';\nlet overpass = '[out:json];out;';\nif (clas.vias.length === 2 && clas.vias.every(v => v.numero)) {\n  overpass = `[out:json][timeout:12];way[\"highway\"][\"name\"~\"${reVia(clas.vias[0])}\",i]${bb}->.a;way[\"highway\"][\"name\"~\"${reVia(clas.vias[1])}\",i]${bb}->.b;node(w.a)(w.b);out;`;\n}\nconst lugarQ = clas.lugar ? `${clas.lugar}, Cali, Valle del Cauca` : 'Cali, Valle del Cauca';\nreturn [{ json: { ...prev, clas, overpass, lugarQ, tieneVias: overpass.length > 20 } }];\n"
+      },
+      "id": "4bd094bb-2b8e-4fdf-95e5-dd1b9706a500",
+      "name": "Fusionar IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://overpass-api.de/api/interpreter",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "data",
+              "value": "={{ $json.overpass }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 12000
+        }
+      },
+      "id": "cb2bf736-e459-49e5-9593-664f59465837",
+      "name": "Buscar cruce (Overpass)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "https://nominatim.openstreetmap.org/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $('Fusionar IA').first().json.lugarQ }}"
+            },
+            {
+              "name": "format",
+              "value": "jsonv2"
+            },
+            {
+              "name": "limit",
+              "value": "3"
+            },
+            {
+              "name": "countrycodes",
+              "value": "co"
+            },
+            {
+              "name": "viewbox",
+              "value": "-76.60,3.52,-76.45,3.30"
+            },
+            {
+              "name": "bounded",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "ColAIre-CaliResiliente/1.0 (hackathon DataBridge)"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "es"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "cd706509-46ea-46e5-8509-af1c1d5a066e",
+      "name": "Buscar lugar (Nominatim)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Fusionar IA').first().json;\nconst { p, clas } = prev;\nconst ov = $('Buscar cruce (Overpass)').first().json;\nconst nomRaw = $('Buscar lugar (Nominatim)').all().map(i => i.json);\nconst dist = (a, b) => { const R = 6371000, r = x => x * Math.PI / 180; const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lon - a.lon) / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };\nconst locales = (p.local.candidatos || []).filter(c => c && c.lat);\nconst est = locales[0] || { lat: 3.43, lon: -76.52 };\nconst nombreVia = v => `${v.tipo[0].toUpperCase() + v.tipo.slice(1)} ${v.numero}${v.letra || ''}${v.norte ? ' Norte' : ''}`;\nlet ubic = null;\n// 1) Cruce exacto en OpenStreetMap\nconst nodes = (ov && Array.isArray(ov.elements) ? ov.elements : []).filter(e => e.type === 'node');\nif (prev.tieneVias && nodes.length) {\n  nodes.sort((x, y) => dist(est, x) - dist(est, y));\n  const c = nodes.filter(x => dist(nodes[0], x) < 120);\n  ubic = { lat: +(c.reduce((s, x) => s + x.lat, 0) / c.length).toFixed(6), lon: +(c.reduce((s, x) => s + x.lon, 0) / c.length).toFixed(6), label: `${nombreVia(clas.vias[0])} con ${nombreVia(clas.vias[1])}`, fuente: 'OpenStreetMap (n8n)', conf: 'OSM' };\n}\n// 2) Barrio o intersección conocida calculada por la plataforma\nif (!ubic && locales.length && ['alta', 'confirmada'].includes(locales[0].conf)) ubic = { ...locales[0], fuente: 'ColAIre (barrios / semáforos)' };\n// 3) Lugar nombrado, buscado en Nominatim\nif (!ubic && clas.lugar) {\n  const lista = nomRaw.flatMap(x => Array.isArray(x) ? x : (x.lat ? [x] : (Array.isArray(x.data) ? x.data : [])));\n  const r = lista.find(x => +x.lat > 3.30 && +x.lat < 3.52 && +x.lon > -76.60 && +x.lon < -76.45);\n  if (r) ubic = { lat: +(+r.lat).toFixed(6), lon: +(+r.lon).toFixed(6), label: String(r.display_name || clas.lugar).split(',').slice(0, 2).join(','), fuente: 'Nominatim (n8n)', conf: 'OSM' };\n}\n// 4) Lo que haya estimado la plataforma\nif (!ubic && locales.length) ubic = { ...locales[0], fuente: 'ColAIre (estimación local)' };\nreturn [{ json: { ...prev, ubic } }];\n"
+      },
+      "id": "be91dce3-df02-40d6-8649-69015e724c09",
+      "name": "Elegir ubicación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst { p, clas, ubic, config } = d;\nconst RUTEO = { atrapados: ['bomberos','defensacivil','cruzroja','salud','riesgo'], heridos: ['salud','cruzroja','bomberos','riesgo'], colapso: ['bomberos','defensacivil','riesgo'],\n  estructura: ['riesgo','bomberos'], incendio: ['bomberos','riesgo','policia'], gas: ['bomberos','riesgo'], electrico: ['bomberos','riesgo'], necesidades: ['riesgo','cruzroja','alcaldia'], via: ['movilidad','policia'], info: ['riesgo'] };\nlet roles = [];\nif (clas.tipo === 'emergencia' || clas.tipo === 'info') {\n  roles = [...(RUTEO[clas.categoria] || ['riesgo'])];\n  if (clas.urgencia === 'rojo') roles.push('salud','riesgo','alcaldia','gobernacion');\n  if (clas.urgencia === 'naranja') roles.push('riesgo','alcaldia');\n} else if (clas.tipo === 'ayuda') {\n  roles = clas.personal ? ['riesgo','defensacivil','cruzroja','alcaldia'] : ['riesgo','cruzroja','alcaldia','gobernacion'];\n  if (clas.items.some(i => ['Personal de salud','Apoyo psicológico','Insumos médicos'].includes(i))) roles.push('salud');\n} else if (clas.tipo === 'oferta') roles = ['riesgo','cruzroja'];\nroles = [...new Set(roles)];\nif (!ubic) roles = [];\nconst NOMBRE = { salud: 'Sec. Salud', bomberos: 'Bomberos', riesgo: 'Gestión del Riesgo', alcaldia: 'Alcaldía', gobernacion: 'Gobernación', cruzroja: 'Cruz Roja', defensacivil: 'Defensa Civil', movilidad: 'Sec. Movilidad', policia: 'Policía' };\nconst ICON = { rojo: '🔴 URGENCIA CRÍTICA', naranja: '🟠 URGENCIA ALTA', amarillo: '🟡 URGENCIA MEDIA', azul: '🔵 INFORMATIVO', ninguna: '⚪' };\nconst CAT = { atrapados: 'Personas atrapadas', heridos: 'Personas heridas', colapso: 'Colapso de edificación', estructura: 'Daño estructural', incendio: 'Incendio / explosión', gas: 'Fuga de gas', electrico: 'Riesgo eléctrico', necesidades: 'Necesidades básicas', via: 'Vía bloqueada', info: 'Información' };\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst hora = new Date(p.ts).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });\nlet titulo = clas.tipo === 'ayuda' ? (clas.personal ? '🙋 SE NECESITA PERSONAL' : '📦 SE NECESITAN INSUMOS') : clas.tipo === 'oferta' ? '🤝 OFRECIMIENTO DE AYUDA' : `${ICON[clas.urgencia]}${clas.categoria ? ' · ' + (CAT[clas.categoria] || clas.categoria) : ''}`;\nconst texto = [`<b>${esc(titulo)}</b>`, clas.items.length ? `🧾 ${esc(clas.items.join(', '))}` : null,\n  ubic ? `📍 ${esc(ubic.label)}` : '📍 Sin ubicación', `🕒 ${esc(hora)}`, `💬 «${esc(p.texto)}»`, `👤 ${esc(p.nombre)}`,\n  ubic ? `🗺 https://maps.google.com/?q=${ubic.lat},${ubic.lon}` : null, `🏛 Para: ${esc(roles.map(r => NOMBRE[r] || r).join(', '))}`, '— ColAIre · Cali Resiliente'].filter(Boolean).join('\\n');\n// Un mensaje por grupo de Telegram configurado (sin repetir grupos)\nconst chats = new Set(); const C = (config.TELEGRAM_CHATS || {});\nif (C.default) chats.add(String(C.default));\nfor (const r of roles) if (C[r]) chats.add(String(C[r]));\nconst telegram = config.TELEGRAM_BOT_TOKEN && clas.tipo !== 'charla' && roles.length ? [...chats].map(chat_id => ({ chat_id, text: texto })) : [];\nconst respuesta = { ok: true, motor: 'n8n', modelo: clas.fuenteIA === 'gemini' ? config.GEMINI_MODEL : 'reglas locales', errorIA: clas.errorIA || null,\n  tipo: clas.tipo, urgencia: clas.urgencia, categoria: clas.categoria, items: clas.items, personal: clas.personal, resumen: clas.resumen, lugar: clas.lugar,\n  ubic, notificados: roles, telegram: { enviados: telegram.length }, ms: Date.now() - d.t0 };\nreturn [{ json: { respuesta, telegram, token: config.TELEGRAM_BOT_TOKEN } }];\n"
+      },
+      "id": "499e0046-dcd6-4dd3-af49-171c6b6aca71",
+      "name": "Ruteo a entidades",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.respuesta) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "277a367f-3134-4466-9fcf-138a8b2457da",
+      "name": "Responder a la plataforma",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { telegram, token } = $input.first().json;\nreturn telegram.map(t => ({ json: { ...t, token } }));\n"
+      },
+      "id": "48ddd6d6-4b26-4317-9147-7a9369b27c96",
+      "name": "Mensajes de Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $json.token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: $json.text, parse_mode: 'HTML', disable_web_page_preview: true }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "8bc5bc92-22d2-40dc-9bac-d99515dbede8",
+      "name": "Enviar alerta a Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## ColAIre · Motor de interpretación\n1. Edita **Configuración y entrada** (clave de Gemini y Telegram).\n2. Activa el flujo y copia la **Production URL** del primer nodo.\n3. Pégala en la plataforma: abajo del chat, botón «Motor» › Probar conexión.\n\nSi Gemini o OpenStreetMap fallan, el flujo sigue con lo que calculó la plataforma.",
+        "height": 260,
+        "width": 420
+      },
+      "id": "bb3810b7-5fc3-43a6-8695-6bf80b9ef106",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Mensaje del chat ciudadano": {
+      "main": [
+        [
+          {
+            "node": "Configuración y entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración y entrada": {
+      "main": [
+        [
+          {
+            "node": "Preparar prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar prompt": {
+      "main": [
+        [
+          {
+            "node": "Interpretar con Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpretar con Gemini": {
+      "main": [
+        [
+          {
+            "node": "Fusionar IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fusionar IA": {
+      "main": [
+        [
+          {
+            "node": "Buscar cruce (Overpass)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar cruce (Overpass)": {
+      "main": [
+        [
+          {
+            "node": "Buscar lugar (Nominatim)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar lugar (Nominatim)": {
+      "main": [
+        [
+          {
+            "node": "Elegir ubicación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elegir ubicación": {
+      "main": [
+        [
+          {
+            "node": "Ruteo a entidades",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ruteo a entidades": {
+      "main": [
+        [
+          {
+            "node": "Responder a la plataforma",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mensajes de Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensajes de Telegram": {
+      "main": [
+        [
+          {
+            "node": "Enviar alerta a Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
